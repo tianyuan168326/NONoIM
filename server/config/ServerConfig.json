@@ -1,0 +1,18 @@
+{
+	"ClientInfoRedisServer":{
+		"IP":"127.0.0.1",
+		"PORT":9988,
+		"OPTIONS":{
+
+		}
+	},
+	"ChatLogRedisServer":{
+		"IP":"127.0.0.1",
+		"PORT":9988,
+		"OPTIONS":{
+
+		}
+	},
+	"UDPPORT":7788,
+	"HTTPPORT":8899
+}
