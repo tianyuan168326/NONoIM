@@ -29,25 +29,25 @@ process.on('message',function(message){
 		*		sender_id:"1"
 		*	}
 		*/
-		case "LogOn":
-		NONoClientInfoRedisServer.get(message.sender_id,function(err,reply){
-			if( !reply){
-				NONoClientInfoRedisServer.set(message.sender_id,{
-					ip:"",
-					port:"",
-					state:1
-				});
-			}else{
-				console.log("get new client info:");
-				console.log(reply);
-				reply.state = 1;
-				NONoClientInfoRedisServer.set(message.sender_id,reply);
-			}
-		});
-		childHeartTimerProcess.send({cmd:"new_log_on",data:{
-			id:message.sender_id
-		}});
-		break;
+		// case "LogOn":
+		// NONoClientInfoRedisServer.get(message.sender_id,function(err,reply){
+		// 	if( !reply){
+		// 		NONoClientInfoRedisServer.set(message.sender_id,{
+		// 			ip:"",
+		// 			port:"",
+		// 			state:1
+		// 		});
+		// 	}else{
+		// 		console.log("get new client info:");
+		// 		console.log(reply);
+		// 		reply.state = 1;
+		// 		NONoClientInfoRedisServer.set(message.sender_id,reply);
+		// 	}
+		// });
+		// childHeartTimerProcess.send({cmd:"new_log_on",data:{
+		// 	id:message.sender_id
+		// }});
+		// break;
 		/**
 		*	{
 		*		cmd:"Push",

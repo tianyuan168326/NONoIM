@@ -11,10 +11,10 @@ module.exports.log=function(level,message){
 		console.log(message.error);
 		break;
 		case "warn":
-		//console.log(message.warn);
+		console.log(message.warn);
 		break;
 		default:
-		//console.log(message.debug);
+		console.log(message.debug);
 		break;
 	}
 };

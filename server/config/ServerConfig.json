@@ -13,6 +13,6 @@
 
 		}
 	},
-	"UDPPORT":7788,
+	"TCPPORT":7788,
 	"HTTPPORT":8899
 }
