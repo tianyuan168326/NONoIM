@@ -9,7 +9,7 @@
 * Message Push
     * Push from Http post request,which means other old systems written by php lang can also use NONoM by seamless converting
 * Instance Message
-    * Use UDP connection with limit heartbeat packet
+    * Use TCP connection with limit heartbeat packet
     * more quick message-running speed with UDP packet
 * Multi-Language SDK supported(future)
     * Firist with JAVA,Node.js,python,C++/C
