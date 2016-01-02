@@ -2,10 +2,10 @@
  * every message send to client has its own type
  * 1:normal message
  * 2:ack message
- * 
  */
 var redis = require('redis');
 var HashMap = require('hashmap');
+var NONoProtocol = new require('./components/NONoProtocol.js')();
 var EventEmitter = require('events').EventEmitter;
 var eventController = new EventEmitter();
 var ServerConfig = require('./config/ServerConfig.json');
@@ -67,7 +67,6 @@ var server = net.createServer(function(client) {
 			*	}
 			*/
 			case 'log_on':
-			NONoLog.log('debug','get new connection');
 			id = Number(data.id);
 			clientSocketMap.set(id,client);
 			clientStateMap.set(id,STATE_ALIVE);
@@ -108,10 +107,8 @@ var server = net.createServer(function(client) {
 			id = Number(data.id);
 			receiver_id = Number(data.receiver_id);
 			//feed back to sender client
-			var gotMessageACK = {
-				cmd:"ack_got_message",
-				msg_uid:data.msg.msg_uid
-			};
+			var gotMessageACK = NONoProtocol.get("ack_got_message");
+			gotMessageACK.msg_uid = data.msg.msg_uid;
 			var gotMessageACKString = JSON.stringify(gotMessageACK);
 			client.write(TcpPacketParser.tcpSenderPacketWrapper(gotMessageACKString) );
 			//process message
@@ -198,17 +195,18 @@ eventController.on('send_message',function(receiver_id){
 		var message = messageCacheMapRecivingFromClient.get(
 			clientMessageListCacheWaitingForRecive[index]
 			);
-		var messagePayLoad = message.msg;
-		messagePayLoad['cmd'] = 'new_message';
-		messagePayLoad['msg_sender_id']  =message.id;
+		var messagePayLoad = NONoProtocol.get('new_message');
+		messagePayLoad.msg_type = message.msg.msg_type;
+		messagePayLoad.msg_payload = message.msg.msg_payload;
+		messagePayLoad.msg_uid = message.msg.msg_uid;
+		messagePayLoad.msg_sender_id = message.id;
 		var messagePayLoadString = JSON.stringify(messagePayLoad);
-		client.write(TcpPacketParser.tcpSenderPacketWrapper(messagePayLoadString) );
+		console.log(messagePayLoadString);
+		client.write(TcpPacketParser.tcpSenderPacketWrapper(messagePayLoadString));
 	}
 });
  var fs = require('fs');
 process.on('uncaughtException', function (err) {
- 
   fs.appendFile('message.txt', err+":"+err.stack, function (err) {
-    
   });
 });

@@ -57,15 +57,15 @@ module.exports.iniNONoIM = function(ip,port,id,newMessageCB){
  	host:NONo_SERVER_IP,
      port: NONo_SERVER_PORT
  	},function(){
-		console.log("NONoIM client SDK:send tcp logon success");
+ 		NONoSocket.setEncoding('utf8');
+		NONoSocket.setTimeout(0);
+		NONoSocket.setNoDelay(true);
 		NONoSocket.write(TcpPacketParser.tcpSenderPacketWrapper(logOnJsonString) );
 		setInterval(function(){
 			NONoSocket.write(TcpPacketParser.tcpSenderPacketWrapper(heartBeatJsonString) );
 				 	}, 30000);
 	});
-	NONoSocket.setEncoding('utf8');
-	NONoSocket.setTimeout(0);
-	NONoSocket.setNoDelay(true);
+	
 	NONoSocket.on('data',function(data){
 		tcpPacketParser.grabPacket(data.toString());
 		var tcpPacket;
