@@ -115,8 +115,6 @@ module.exports.iniNONoIM = function(ip,port,id,newMessageCB){
 			 * {msg_type:2,msg_uid:"1-1451145715900"}
 			 */
 			case 'ack_got_message':
-			//messageMap[msg.msg_uid].state = 1;
-			console.log('sweep up uid');
 			messageMap.remove(msg.msg_uid);
 			break;
 		}

@@ -40,7 +40,6 @@ process.on('messsage',function(message,handle){
 /**when the sender client didn't get the ack after sending for sometime,
 we let the Client to go with it**/
 //var clientSocketArray = [];
-var closedSocketArray = [];
 var clientSocketMap = new HashMap();
 var clientStateMap = new HashMap();
 var clientTcpParserMap = new HashMap();
@@ -58,7 +57,11 @@ var server = net.createServer(function(client) {
 		tcpPacketParser.grabPacket(dataString.toString());
 		var tcpPacket=null;
 		while(tcpPacket = tcpPacketParser.parsePacket()){
-		data = JSON.parse(tcpPacket);
+			try{
+				data = JSON.parse(tcpPacket);
+			}catch(e){
+				NONoLog.log('debug',tcpPacket);
+			}
 		switch(data.cmd){
 			/**
 			*	{
@@ -124,11 +127,13 @@ var server = net.createServer(function(client) {
 					if(!(clientMessageListCacheWaitingForRecive instanceof Array)){
 						clientMessageListCacheWaitingForRecive = [];
 					}
+					console.log(data);
 					clientMessageListCacheWaitingForRecive.push(data.msg.msg_uid);
 					clientMessageListCacheMapWaitingForRecive.set(receiver_id,
 						JSON.stringify(clientMessageListCacheWaitingForRecive));
 				});
-			if(clientSocketMap.get(receiver_id)&&clientStateMap.get(receiver_id) !=STATE_DEAD){
+			var clientState = clientStateMap.get(receiver_id);
+			if(clientSocketMap.get(receiver_id)&&(clientState===STATE_MID||clientState ===STATE_ALIVE)){
 				eventController.emit('send_message',receiver_id);
 
 			}
@@ -170,8 +175,16 @@ var server = net.createServer(function(client) {
    	client.on("end", function() {
    	NONoLog.log('warn','one client disconnected!');
    	});
-   	client.on("close", function() {
-   	closedSocketArray.push(client);
+   	client.on("error", function() {
+   		NONoLog.log('warn','one client error!');
+   	clientSocketMap.forEach(function(socket,id){
+   		if(socket == client){
+   			socket.destroy();
+   			clientSocketMap.remove(id);
+   			clientStateMap.remove(id);
+
+   		}
+   	});
    	});
  });
 server.listen(7788,function(){
@@ -220,7 +233,6 @@ eventController.on('send_message',function(receiver_id){
 			clientMessageListCacheWaitingForRecive = JSON.parse(clientMessageListCacheWaitingForRecive);
 		}
 		client = clientSocketMap.get(receiver_id);
-		//if(client.)
 		for(var index  = 0;index<clientMessageListCacheWaitingForRecive.length;index++){
 			 messageCacheMapRecivingFromClient.get(
 				clientMessageListCacheWaitingForRecive[index],function(err,message){
