@@ -23,13 +23,18 @@ var sendMsgFailedHandler= {};
  */
 
 var messageMap = new HashMap();
+/**** sending history array********/
+var sendHistoryArray = [];
 /**
  * 
  */
 var receiver_message_map = {};
 setInterval(function(){
 	messageMap.forEach(function(message,msg_uid){
-		sendMsgFailedHandler(message);
+		/**we have send,but not received the ack***/
+		if(sendHistoryArray.indexOf(msg_uid)!=-1){
+			sendMsgFailedHandler(message);
+		}
 	});
 },5000);
 /**
@@ -70,8 +75,13 @@ module.exports.iniNONoIM = function(ip,port,id,newMessageCB){
 		tcpPacketParser.grabPacket(data.toString());
 		var tcpPacket;
 		while(tcpPacket = tcpPacketParser.parsePacket()){
-			NONoLog.log('debug',tcpPacket);
-			msg = JSON.parse(tcpPacket);
+			
+			try{
+				msg = JSON.parse(tcpPacket);
+			}catch(e){
+				NONoLog.log('debug',tcpPacket);
+				continue;
+			}
 		switch(msg.cmd){
 			/**
 			 * normal message
@@ -145,12 +155,13 @@ module.exports.sendMessage = function(message,receiver_id,send_callback){
 			};
 	var messageJsonString = JSON.stringify(messageJson);
 	messageMap.set(msg_uid,messageJson);
-	NONoSocket.write(TcpPacketParser.tcpSenderPacketWrapper(messageJsonString) );
+	NONoSocket.write(TcpPacketParser.tcpSenderPacketWrapper(messageJsonString));
+	sendHistoryArray.push(msg_uid);
 }
  var fs = require('fs');
-process.on('uncaughtException', function (err) {
+// process.on('uncaughtException', function (err) {
  
-  fs.appendFile('message.txt', err+":"+err.stack, function (err) {
+//   fs.appendFile('message.txt', err+":"+err.stack, function (err) {
     
-  });
-});
+//   });
+// });

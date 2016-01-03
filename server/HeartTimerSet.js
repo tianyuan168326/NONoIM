@@ -13,7 +13,6 @@ var RedisClients = require('./components/RedisClients.js');
 var NONoLog = require('./NONoIMHelper/NONoLog.js');
 var child_process = require('child_process');
 var NONoChatLogRedisServer= require('./components/NONoChatLogRedisServer.js');
-var NONoClientInfoRedisServer = require('./components/NONoClientInfoRedisServer.js');
 var TcpPacketParser = require('./components/TcpPacketParser.js');
 const STATE_DEAD = 0;
 const STATE_MID = 1;
@@ -41,13 +40,14 @@ process.on('messsage',function(message,handle){
 /**when the sender client didn't get the ack after sending for sometime,
 we let the Client to go with it**/
 //var clientSocketArray = [];
+var closedSocketArray = [];
 var clientSocketMap = new HashMap();
 var clientStateMap = new HashMap();
 var clientTcpParserMap = new HashMap();
-var messageCacheMapRecivingFromClient = new HashMap();
-var clientMessageListCacheMapWaitingForRecive = new HashMap();
+var messageCacheMapRecivingFromClient = NONoChatLogRedisServer.getRedisHandle();
+var clientMessageListCacheMapWaitingForRecive = NONoChatLogRedisServer.getRedisHandle();
 var net = require('net');
-var server = net.createServer(function(client) { 
+var server = net.createServer(function(client) {
 	NONoLog.log('debug','new client connected!');
 	var tcpPacketParser = new TcpPacketParser.TcpPacketParser();
 	//clientSocketArray.push(client);
@@ -113,15 +113,24 @@ var server = net.createServer(function(client) {
 			client.write(TcpPacketParser.tcpSenderPacketWrapper(gotMessageACKString) );
 			//process message
 			clientStateMap.set(id,STATE_ALIVE);
-			messageCacheMapRecivingFromClient.set(data.msg.msg_uid,data);
-			clientMessageListCacheWaitingForRecive = clientMessageListCacheMapWaitingForRecive.get(receiver_id);
-			if(!clientMessageListCacheWaitingForRecive){
-				clientMessageListCacheWaitingForRecive = [];
-			}
-			clientMessageListCacheWaitingForRecive.push(data.msg.msg_uid);
-			clientMessageListCacheMapWaitingForRecive.set(receiver_id,clientMessageListCacheWaitingForRecive);
+			messageCacheMapRecivingFromClient.set(data.msg.msg_uid,JSON.stringify(data));
+			clientMessageListCacheMapWaitingForRecive.get(receiver_id
+				,function(err,clientMessageListCacheWaitingForRecive){
+					if(!clientMessageListCacheWaitingForRecive){
+						clientMessageListCacheWaitingForRecive = [];
+					}else{
+						clientMessageListCacheWaitingForRecive= JSON.parse(clientMessageListCacheWaitingForRecive);
+					}
+					if(!(clientMessageListCacheWaitingForRecive instanceof Array)){
+						clientMessageListCacheWaitingForRecive = [];
+					}
+					clientMessageListCacheWaitingForRecive.push(data.msg.msg_uid);
+					clientMessageListCacheMapWaitingForRecive.set(receiver_id,
+						JSON.stringify(clientMessageListCacheWaitingForRecive));
+				});
 			if(clientSocketMap.get(receiver_id)&&clientStateMap.get(receiver_id) !=STATE_DEAD){
 				eventController.emit('send_message',receiver_id);
+
 			}
 			break;
 			/*the client ack that he had received the message
@@ -134,26 +143,35 @@ var server = net.createServer(function(client) {
 			 */
 			case 'ack_message':
 			id = Number(data.id);
-			messageCacheMapRecivingFromClient.remove(data.msg_uid);
-			clientMessageListCacheWaitingForRecive = clientMessageListCacheMapWaitingForRecive.get(id);
-			if(!clientMessageListCacheWaitingForRecive){
+			//messageCacheMapRecivingFromClient.remove(data.msg_uid);
+			clientMessageListCacheMapWaitingForRecive.get(id,function(err,clientMessageListCacheWaitingForRecive){
+				if(!clientMessageListCacheWaitingForRecive){
 				NONoLog.log('error','logic error:impossible to ack ');
-			}
-			AnotherclientMessageListCacheWaitingForRecive = [];
-			for(var index = 0;index< clientMessageListCacheWaitingForRecive.length;index++){
-				if(clientMessageListCacheWaitingForRecive[index] == data.msg_uid){
-					continue;
 				}else{
-					AnotherclientMessageListCacheWaitingForRecive.push(clientMessageListCacheWaitingForRecive[index]);
+					clientMessageListCacheWaitingForRecive = JSON.parse(clientMessageListCacheWaitingForRecive);
 				}
-			}
-			clientMessageListCacheMapWaitingForRecive.set(id,AnotherclientMessageListCacheWaitingForRecive);
+				AnotherclientMessageListCacheWaitingForRecive = [];
+				for(var index = 0;index< clientMessageListCacheWaitingForRecive.length;index++){
+					if(clientMessageListCacheWaitingForRecive[index] == data.msg_uid){
+						continue;
+					}else{
+						AnotherclientMessageListCacheWaitingForRecive.push(clientMessageListCacheWaitingForRecive[index]);
+					}
+				}
+				clientMessageListCacheMapWaitingForRecive.set(id,
+					JSON.stringify(AnotherclientMessageListCacheWaitingForRecive));
+			});
+			
+			
 			break;
 		}
 		}
 	});
    	client.on("end", function() {
    	NONoLog.log('warn','one client disconnected!');
+   	});
+   	client.on("close", function() {
+   	closedSocketArray.push(client);
    	});
  });
 server.listen(7788,function(){
@@ -162,16 +180,22 @@ server.listen(7788,function(){
 /*we check our clients every 30s*/
 /**ALIVE - >MID -> DEAD,when the state turn to DEAD,we think the client is not online***/
 setInterval(function(){
-	clientStateMap.forEach(function(id,state){
+	clientStateMap.forEach(function(state,id){
 		if(state>2||state <0){
 			NONoLog.log('error','client state wrong!state can only be 0、1、2');
 		}
-		if(state == STATE_DEAD){
+		switch(state){
+			case STATE_ALIVE:
+			case STATE_MID:
+			clientStateMap.set(id,clientStateMap.get(id)-1);
+			break;
+			case STATE_DEAD:
 			clientSocketMap.get(id).destroy();
 			clientSocketMap.remove(id);
-		}else{
-			clientStateMap.set(id,clientStateMap.get(id)-1);
-		}	
+			clientStateMap.remove(id);
+			NONoLog.log('debug','remove the offline client');
+			break;
+		}
 	});
 },30000);
 /***************breaker*****************/
@@ -189,24 +213,36 @@ eventController.on('send_message',function(receiver_id){
 			*		}
 			*	}
 			*	*/
-	clientMessageListCacheWaitingForRecive = clientMessageListCacheMapWaitingForRecive.get(receiver_id);
-	client = clientSocketMap.get(receiver_id);
-	for(var index  = 0;index<clientMessageListCacheWaitingForRecive.length;index++){
-		var message = messageCacheMapRecivingFromClient.get(
-			clientMessageListCacheWaitingForRecive[index]
+	clientMessageListCacheMapWaitingForRecive.get(receiver_id,function(err,clientMessageListCacheWaitingForRecive){
+		if(err || !clientMessageListCacheWaitingForRecive){
+			NONoLog.log('error',"error!");
+		}else{
+			clientMessageListCacheWaitingForRecive = JSON.parse(clientMessageListCacheWaitingForRecive);
+		}
+		client = clientSocketMap.get(receiver_id);
+		//if(client.)
+		for(var index  = 0;index<clientMessageListCacheWaitingForRecive.length;index++){
+			 messageCacheMapRecivingFromClient.get(
+				clientMessageListCacheWaitingForRecive[index],function(err,message){
+					if(err){
+						console.log(err);
+					}
+					message = JSON.parse(message);
+					var messagePayLoad = NONoProtocol.get('new_message');
+					messagePayLoad.msg_type = message.msg.msg_type;
+					messagePayLoad.msg_payload = message.msg.msg_payload;
+					messagePayLoad.msg_uid = message.msg.msg_uid;
+					messagePayLoad.msg_sender_id = message.id;
+					var messagePayLoadString = JSON.stringify(messagePayLoad);
+					client.write(TcpPacketParser.tcpSenderPacketWrapper(messagePayLoadString));
+				}
 			);
-		var messagePayLoad = NONoProtocol.get('new_message');
-		messagePayLoad.msg_type = message.msg.msg_type;
-		messagePayLoad.msg_payload = message.msg.msg_payload;
-		messagePayLoad.msg_uid = message.msg.msg_uid;
-		messagePayLoad.msg_sender_id = message.id;
-		var messagePayLoadString = JSON.stringify(messagePayLoad);
-		console.log(messagePayLoadString);
-		client.write(TcpPacketParser.tcpSenderPacketWrapper(messagePayLoadString));
 	}
+	});
+	
 });
  var fs = require('fs');
-process.on('uncaughtException', function (err) {
-  fs.appendFile('message.txt', err+":"+err.stack, function (err) {
-  });
-});
+// process.on('uncaughtException', function (err) {
+//   fs.appendFile('message.txt', err+":"+err.stack, function (err) {
+//   });
+// });

@@ -1,5 +1,5 @@
 var NONoIM =require('./NONoIM.js');
-//const HOST = "120.25.81.232";
+//const HOST = "121.42.139.190";
 const HOST = "127.0.0.1";
 const HTTPPORT = 8899;
 const TCPPORT = 7788;
