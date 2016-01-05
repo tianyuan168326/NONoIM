@@ -1,6 +1,6 @@
 var NONoIM =require('./NONoIM.js');
-//const HOST = "121.42.139.190";
-const HOST = "127.0.0.1";
+const HOST = "121.42.139.190";
+//const HOST = "127.0.0.1";
 const HTTPPORT = 8899;
 const TCPPORT = 7788;
 const ID= 1;
@@ -31,4 +31,4 @@ setInterval(function(){
  	NONoIM.sendMessage("id "+ID+" sending message:"+"counter : "+count
  		,PEERID,function(err,bytes){
  		});
-				 	}, 1000);
+				 	}, 10000);
