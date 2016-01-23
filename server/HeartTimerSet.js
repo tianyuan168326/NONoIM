@@ -212,25 +212,23 @@ var server = net.createServer(function(client) {
 								if(err){
 									reject('fetch message by uid from redis error!');
 								}
-								resolve({
-									message:message,
-									client:client
-								});
+								sendMessage(message,
+									client);
 							});
 					}
 				
 				})
-			})
-			.then(function(object){
-				var message = JSON.parse(object.message);
+			});
+			function sendMessage(message,client){
+				var message = JSON.parse(message);
 				var messagePayLoad = NONoProtocol.get('new_message');
 				messagePayLoad.msg_type = message.msg.msg_type;
 				messagePayLoad.msg_payload = message.msg.msg_payload;
 				messagePayLoad.msg_uid = message.msg.msg_uid;
 				messagePayLoad.msg_sender_id = message.id;
 				var messagePayLoadString = JSON.stringify(messagePayLoad);
-				object.client.write(TcpPacketParser.tcpSenderPacketWrapper(messagePayLoadString));
-			});
+				client.write(TcpPacketParser.tcpSenderPacketWrapper(messagePayLoadString));
+			}
 			break;
 			/*the client ack that he had received the message
 			*{
