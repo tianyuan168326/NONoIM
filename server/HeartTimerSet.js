@@ -296,7 +296,12 @@ setInterval(function(){
 			clientStateMap.set(id,clientStateMap.get(id)-1);
 			break;
 			case STATE_DEAD:
-			clientSocketMap.get(id).destroy();
+			var client = clientSocketMap.get(id);
+			if(!client){
+				NONoLog.log("error","the client tcp has been removed!!");
+			}else{
+				client.destroy();
+			}
 			clientSocketMap.remove(id);
 			clientStateMap.remove(id);
 			NONoLog.log('debug','remove the offline client');

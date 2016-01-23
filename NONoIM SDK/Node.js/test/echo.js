@@ -31,4 +31,4 @@ setInterval(function(){
  	NONoIM.sendMessage("id "+ID+" sending message:"+"counter : "+count+"\n"
  		,PEERID,function(err,bytes){
  		});
-				 	}, 1000);
+				 	}, 10000);
