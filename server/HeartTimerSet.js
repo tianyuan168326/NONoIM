@@ -5,6 +5,7 @@
  */
 var redis = require('redis');
 var HashMap = require('hashmap');
+var async = require('async');
 var NONoProtocol = new require('./components/NONoProtocol.js')();
 var EventEmitter = require('events').EventEmitter;
 var eventController = new EventEmitter();
@@ -60,7 +61,6 @@ var server = net.createServer(function(client) {
 			try{
 				data = JSON.parse(tcpPacket);
 			}catch(e){
-				NONoLog.log('debug',tcpPacket);
 			}
 		switch(data.cmd){
 			/**
@@ -116,9 +116,31 @@ var server = net.createServer(function(client) {
 			client.write(TcpPacketParser.tcpSenderPacketWrapper(gotMessageACKString) );
 			//process message
 			clientStateMap.set(id,STATE_ALIVE);
-			messageCacheMapRecivingFromClient.set(data.msg.msg_uid,JSON.stringify(data));
-			clientMessageListCacheMapWaitingForRecive.get(receiver_id
-				,function(err,clientMessageListCacheWaitingForRecive){
+			var clientMessageListCacheWaitingForRecive = {};
+			Promise.resolve()
+			.then(function(){
+				return new Promise(function(resolve,reject){
+					messageCacheMapRecivingFromClient.set(data.msg.msg_uid,JSON.stringify(data),function(err){
+					if(err){
+						reject("save message error");
+					}
+					resolve();
+				});
+				});
+			})
+			.then(function(){
+				return new Promise(function(resolve,reject){
+					clientMessageListCacheMapWaitingForRecive.get(receiver_id
+					,function(err,clientMessageListCacheWaitingForRecive){
+						if(err){
+							reject("get message uid list error");
+						}
+						resolve(clientMessageListCacheWaitingForRecive);
+					});	
+				});	
+			})
+			.then(function(clientMessageListCacheWaitingForRecive){
+				return new Promise(function(resolve){
 					if(!clientMessageListCacheWaitingForRecive){
 						clientMessageListCacheWaitingForRecive = [];
 					}else{
@@ -127,16 +149,88 @@ var server = net.createServer(function(client) {
 					if(!(clientMessageListCacheWaitingForRecive instanceof Array)){
 						clientMessageListCacheWaitingForRecive = [];
 					}
-					console.log(data);
+					resolve(clientMessageListCacheWaitingForRecive);
+				});
+					
+			})
+			.then(function(clientMessageListCacheWaitingForRecive){
+				return new Promise(function(resolve,reject){
 					clientMessageListCacheWaitingForRecive.push(data.msg.msg_uid);
 					clientMessageListCacheMapWaitingForRecive.set(receiver_id,
-						JSON.stringify(clientMessageListCacheWaitingForRecive));
+						JSON.stringify(clientMessageListCacheWaitingForRecive),function(err){
+							if(err){
+								reject("save new ListCache error");
+							}
+							resolve();
+						});
 				});
-			var clientState = clientStateMap.get(receiver_id);
-			if(clientSocketMap.get(receiver_id)&&(clientState===STATE_MID||clientState ===STATE_ALIVE)){
-				eventController.emit('send_message',receiver_id);
-
+				
+			})
+			.then(function(){
+				return new Promise(function (resolve,reject){
+					var clientState = clientStateMap.get(receiver_id);
+							if(clientSocketMap.get(receiver_id)&&(clientState===STATE_MID||clientState ===STATE_ALIVE)){
+							resolve(receiver_id);
+							}
+						});
 			}
+			)
+			.then(function(receiver_id){
+				/*
+			*	{
+			*		cmd:"send_msg",
+			*		id:2,
+			*		receiver_id:1,
+			*		msg:{
+			*			msg_type:1,
+			*			msg_payload:"the message payload",
+			*			msg_uid:"id-timestamp"
+			*		}
+			*	}
+			*	*/
+			return new Promise(function(resolve,reject){
+				clientMessageListCacheMapWaitingForRecive.get(receiver_id,function(err,clientMessageListCacheWaitingForRecive){
+					if(err){
+						reject('get listCache error!');
+					}
+					resolve(clientMessageListCacheWaitingForRecive);
+				});
+
+			});
+			})
+			.then(function(clientMessageListCacheWaitingForRecive){
+				return new Promise(function(resolve,reject){
+					if( !clientMessageListCacheWaitingForRecive){
+						reject('list cache should not be null theoretically!');
+					}else{
+					clientMessageListCacheWaitingForRecive = JSON.parse(clientMessageListCacheWaitingForRecive);
+					}
+					client = clientSocketMap.get(receiver_id);
+					for(var index  = 0;index<clientMessageListCacheWaitingForRecive.length;index++){
+					messageCacheMapRecivingFromClient.get(
+							clientMessageListCacheWaitingForRecive[index],function(err,message){
+								if(err){
+									reject('fetch message by uid from redis error!');
+								}
+								resolve({
+									message:message,
+									client:client
+								});
+							});
+					}
+				
+				})
+			})
+			.then(function(object){
+				var message = JSON.parse(object.message);
+				var messagePayLoad = NONoProtocol.get('new_message');
+				messagePayLoad.msg_type = message.msg.msg_type;
+				messagePayLoad.msg_payload = message.msg.msg_payload;
+				messagePayLoad.msg_uid = message.msg.msg_uid;
+				messagePayLoad.msg_sender_id = message.id;
+				var messagePayLoadString = JSON.stringify(messagePayLoad);
+				object.client.write(TcpPacketParser.tcpSenderPacketWrapper(messagePayLoadString));
+			});
 			break;
 			/*the client ack that he had received the message
 			*{
@@ -147,6 +241,7 @@ var server = net.createServer(function(client) {
 			*	}
 			 */
 			case 'ack_message':
+			NONoLog.log('debug',"get ack");
 			id = Number(data.id);
 			//messageCacheMapRecivingFromClient.remove(data.msg_uid);
 			clientMessageListCacheMapWaitingForRecive.get(id,function(err,clientMessageListCacheWaitingForRecive){
@@ -214,47 +309,13 @@ setInterval(function(){
 /***************breaker*****************/
 /*********event ***/
 eventController.on('send_message',function(receiver_id){
-	/*
-			*	{
-			*		cmd:"send_msg",
-			*		id:2,
-			*		receiver_id:1,
-			*		msg:{
-			*			msg_type:1,
-			*			msg_payload:"the message payload",
-			*			msg_uid:"id-timestamp"
-			*		}
-			*	}
-			*	*/
-	clientMessageListCacheMapWaitingForRecive.get(receiver_id,function(err,clientMessageListCacheWaitingForRecive){
-		if(err || !clientMessageListCacheWaitingForRecive){
-			NONoLog.log('error',"error!");
-		}else{
-			clientMessageListCacheWaitingForRecive = JSON.parse(clientMessageListCacheWaitingForRecive);
-		}
-		client = clientSocketMap.get(receiver_id);
-		for(var index  = 0;index<clientMessageListCacheWaitingForRecive.length;index++){
-			 messageCacheMapRecivingFromClient.get(
-				clientMessageListCacheWaitingForRecive[index],function(err,message){
-					if(err){
-						console.log(err);
-					}
-					message = JSON.parse(message);
-					var messagePayLoad = NONoProtocol.get('new_message');
-					messagePayLoad.msg_type = message.msg.msg_type;
-					messagePayLoad.msg_payload = message.msg.msg_payload;
-					messagePayLoad.msg_uid = message.msg.msg_uid;
-					messagePayLoad.msg_sender_id = message.id;
-					var messagePayLoadString = JSON.stringify(messagePayLoad);
-					client.write(TcpPacketParser.tcpSenderPacketWrapper(messagePayLoadString));
-				}
-			);
-	}
-	});
+	
 	
 });
- var fs = require('fs');
+//  var fs = require('fs');
 // process.on('uncaughtException', function (err) {
-//   fs.appendFile('message.txt', err+":"+err.stack, function (err) {
+
+//   fs.appendFile('message.txt', "=================== new error br ===========\n"+err+":"+err.stack, function (err) {
 //   });
+
 // });
